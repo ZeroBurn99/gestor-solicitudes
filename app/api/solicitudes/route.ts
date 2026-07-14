@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { solicitudes } from "@/lib/solicitudesStore";
-import { Solicitud } from "@/models/Solicitud";
+import { getSolicitudesCollection } from "@/lib/database";
 
 export async function POST(req: Request) {
   try {
@@ -14,7 +13,14 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { titulo, descripcion, tipo, userId, userEmail } = body;
+
+    const {
+      titulo,
+      descripcion,
+      tipo,
+      userId,
+      userEmail,
+    } = body;
 
     if (!titulo || !descripcion || !tipo || !userId || !userEmail) {
       return NextResponse.json(
@@ -23,7 +29,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const nuevaSolicitud: Solicitud = {
+    const nuevaSolicitud = {
       id: Date.now().toString(),
       userId,
       userEmail,
@@ -35,7 +41,9 @@ export async function POST(req: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    solicitudes.push(nuevaSolicitud);
+    const solicitudesDB = await getSolicitudesCollection();
+
+    solicitudesDB.insert(nuevaSolicitud);
 
     return NextResponse.json(
       {
@@ -44,13 +52,19 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
+
   } catch (error) {
+    console.error("ERROR POST:", error);
+
     return NextResponse.json(
-      { message: "Error al crear solicitud" },
+      {
+        message: "Error al crear solicitud",
+      },
       { status: 500 }
     );
   }
 }
+
 
 export async function GET(req: Request) {
   try {
@@ -67,32 +81,220 @@ export async function GET(req: Request) {
 
     if (!role || !userId) {
       return NextResponse.json(
-        { message: "Información de usuario incompleta" },
+        { message: "Información incompleta" },
         { status: 400 }
       );
     }
 
-    // Admin puede ver todo
+
+    const solicitudesDB = await getSolicitudesCollection();
+
     if (role === "admin") {
+
       return NextResponse.json(
-        { solicitudes },
+        {
+          solicitudes: solicitudesDB.find(),
+        },
         { status: 200 }
       );
+
     }
 
-    // Usuario solo ve sus solicitudes
-    const misSolicitudes = solicitudes.filter(
-      (s) => s.userId === userId
-    );
 
     return NextResponse.json(
-      { solicitudes: misSolicitudes },
+      {
+        solicitudes: solicitudesDB.find({ userId }),
+      },
       { status: 200 }
     );
+
+
   } catch (error) {
+
+    console.error("ERROR GET:", error);
+
     return NextResponse.json(
-      { message: "Error al obtener solicitudes" },
+      {
+        message: "Error al obtener solicitudes",
+      },
       { status: 500 }
     );
   }
+}
+
+
+
+export async function PUT(req: Request) {
+
+  try {
+
+    const authHeader = req.headers.get("authorization");
+
+    if (!authHeader) {
+      return NextResponse.json(
+        { message: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+
+    const body = await req.json();
+
+    const {
+      id,
+      titulo,
+      descripcion,
+      tipo,
+    } = body;
+
+
+    if (!id || !titulo || !descripcion || !tipo) {
+
+      return NextResponse.json(
+        {
+          message: "Datos incompletos",
+        },
+        { status: 400 }
+      );
+
+    }
+
+
+    const solicitudesDB = await getSolicitudesCollection();
+
+
+    const solicitud = solicitudesDB.findOne({
+      id,
+    });
+
+
+    if (!solicitud) {
+
+      return NextResponse.json(
+        {
+          message: "Solicitud no encontrada",
+        },
+        { status: 404 }
+      );
+
+    }
+
+
+    solicitud.titulo = titulo;
+    solicitud.descripcion = descripcion;
+    solicitud.tipo = tipo;
+    solicitud.updatedAt = new Date().toISOString();
+
+
+    solicitudesDB.update(solicitud);
+
+
+    return NextResponse.json(
+      {
+        message: "Solicitud actualizada",
+        solicitud,
+      },
+      { status: 200 }
+    );
+
+
+  } catch(error){
+
+    console.error("ERROR PUT:", error);
+
+    return NextResponse.json(
+      {
+        message:"Error al actualizar solicitud"
+      },
+      {
+        status:500
+      }
+    );
+
+  }
+
+}
+
+
+
+
+export async function DELETE(req: Request){
+
+  try{
+
+    const authHeader = req.headers.get("authorization");
+
+
+    if(!authHeader){
+
+      return NextResponse.json(
+        {
+          message:"No autorizado"
+        },
+        {
+          status:401
+        }
+      );
+
+    }
+
+
+    const body = await req.json();
+
+    const { id } = body;
+
+
+    const solicitudesDB = await getSolicitudesCollection();
+
+
+    const solicitud = solicitudesDB.findOne({
+      id
+    });
+
+
+    if(!solicitud){
+
+      return NextResponse.json(
+        {
+          message:"Solicitud no encontrada"
+        },
+        {
+          status:404
+        }
+      );
+
+    }
+
+
+    solicitudesDB.remove(solicitud);
+
+
+
+    return NextResponse.json(
+      {
+        message:"Solicitud eliminada"
+      },
+      {
+        status:200
+      }
+    );
+
+
+
+  }catch(error){
+
+    console.error("ERROR DELETE:",error);
+
+
+    return NextResponse.json(
+      {
+        message:"Error al eliminar solicitud"
+      },
+      {
+        status:500
+      }
+    );
+
+  }
+
 }
